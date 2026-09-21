@@ -14,3 +14,5 @@
 .answer-table td{padding:5px 10px 5px 0;border-top:1px solid #3c3d4b}
 .answer .query-suggestion{margin-top:11px}
 .status-dot.warn{background:#dba14f}
+.answer-text.answer-failed{color:#f3b9a4}
+.answer-mode{margin:7px 0 0;color:#8e909c;font-size:10px}

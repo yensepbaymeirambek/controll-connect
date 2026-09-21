@@ -66,7 +66,8 @@ function App() {
           {askError && <p className="ask-error"><AlertCircle size={13} /> {askError}</p>}
           {answer && !askError && <div className="answer" aria-live="polite">
             <p className="answer-question">{answer.question}</p>
-            <p className="answer-text">{answer.answer}</p>
+            <p className={`answer-text ${answer.mode === 'error' ? 'answer-failed' : ''}`}>{answer.answer}</p>
+            {answer.mode === 'local' && <p className="answer-mode">Local mode — set OPENAI_API_KEY to answer with ChatGPT.</p>}
             {answer.rows.length > 0 && <table className="answer-table"><thead><tr>{Object.keys(answer.rows[0]).map((key) => <th key={key}>{key}</th>)}</tr></thead><tbody>{answer.rows.map((row, index) => <tr key={index}>{Object.values(row).map((value, cell) => <td key={cell}>{value}</td>)}</tr>)}</tbody></table>}
             <p className="query-suggestion"><Zap size={13} /> Answered from: <span>{answer.sources.join(', ')}</span></p>
           </div>}

@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -6,29 +5,23 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from .connectors import registry
+from .llm import LLMError, answer_question
+from .settings import get_settings
+
 app = FastAPI(title="Signal Connector API", version="0.1.0")
+
+settings = get_settings()
 
 # Direct browser calls need CORS; requests routed through the vite/nginx proxy
 # are same-origin and unaffected.
-CORS_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
-    if origin.strip()
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-SOURCES = [
-    {"id": "jira", "name": "Jira Software", "status": "connected", "last_sync": "12 min ago", "records": 1248},
-    {"id": "asana", "name": "Asana", "status": "connected", "last_sync": "18 min ago", "records": 863},
-    {"id": "linear", "name": "Linear", "status": "connected", "last_sync": "1 hr ago", "records": 421},
-]
 
 # Dashboard payload. Values are still local-mode constants; they move behind the
 # connector registry once a live adapter lands.
@@ -68,22 +61,36 @@ def health() -> dict[str, str]:
 
 @app.get("/api/connectors")
 def list_connectors() -> list[dict[str, Any]]:
-    return SOURCES
+    return registry.describe_connectors()
 
 @app.get("/api/metrics")
 def workspace_metrics() -> dict[str, Any]:
     return {"metrics": METRICS, "chart": CHART, "insight": INSIGHT}
 
+LOCAL_MODE_ANSWER = {
+    "answer": "Local mode: set OPENAI_API_KEY to answer this with ChatGPT.",
+    "rows": [{"team": "Platform", "overdue": 8}, {"team": "Frontend", "overdue": 6}, {"team": "Growth", "overdue": 4}],
+}
+
 @app.post("/api/query")
-def query_workspace(request: QueryRequest) -> dict[str, Any]:
-    # Local mode returns a stable shape until an LLM provider is configured.
-    return {
+async def query_workspace(request: QueryRequest) -> dict[str, Any]:
+    sources = request.sources or registry.connector_ids()
+    base = {
         "question": request.question,
-        "answer": "I found 18 overdue issues across 3 teams.",
-        "sources": request.sources or [source["id"] for source in SOURCES],
-        "rows": [{"team": "Platform", "overdue": 8}, {"team": "Frontend", "overdue": 6}, {"team": "Growth", "overdue": 4}],
+        "sources": sources,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+    if not settings.llm_enabled:
+        return {**base, **LOCAL_MODE_ANSWER, "mode": "local"}
+
+    records = await registry.collect_records(sources)
+    try:
+        result = await answer_question(request.question, records, settings)
+    except LLMError as error:
+        # Surface the reason instead of a 500 so the UI can show it inline.
+        return {**base, "answer": str(error), "rows": [], "mode": "error"}
+    return {**base, **result, "mode": "llm"}
 
 @app.post("/api/export")
 def export_data(request: ExportRequest) -> dict[str, Any]:

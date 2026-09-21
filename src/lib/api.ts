@@ -55,12 +55,16 @@ export interface MetricsResponse {
   insight: Insight
 }
 
+/** 'llm' answered by ChatGPT, 'local' no API key configured, 'error' the model call failed. */
+export type QueryMode = 'llm' | 'local' | 'error'
+
 export interface QueryResponse {
   question: string
   answer: string
   sources: string[]
   rows: Record<string, string | number>[]
   generated_at: string
+  mode: QueryMode
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

@@ -69,6 +69,25 @@ If you are developing a production application, we recommend enabling type-aware
 
     The API starts in local mock mode. Copy `.env.example` to `.env` and add provider credentials before implementing live sync adapters. The connector boundary lives in `backend/app/connectors/`; each adapter should implement `Connector` and normalize records to a common shape.
 
+    ## ChatGPT
+
+    `/api/query` is answered by ChatGPT. Set the key in `.env`:
+
+    ```bash
+    OPENAI_API_KEY=sk-...
+    OPENAI_MODEL=gpt-4o-mini      # any chat-completions model
+    OPENAI_BASE_URL=              # optional OpenAI-compatible gateway
+    ```
+
+    Without a key the endpoint stays in local mode and returns a canned answer,
+    so the app runs unconfigured. The response carries a `mode` field: `llm`,
+    `local`, or `error` when the model call failed.
+
+    The model only sees records returned by the connector registry in
+    `backend/app/connectors/registry.py`, and is instructed not to invent work
+    items that are absent from them. Model failures come back as HTTP 200 with
+    `mode: "error"` and a readable message rather than a 500.
+
     ## MCP
 
     The VS Code MCP entry point is in `.vscode/mcp.json`. Its stdio server exposes the same workspace query surface for AI clients.
