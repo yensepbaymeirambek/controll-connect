@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "signal-workspace": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "mcp_server"]
+    }
+  }
+}

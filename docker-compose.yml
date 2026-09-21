@@ -1,0 +1,49 @@
+# Dev stack: vite dev server + uvicorn --reload, both on the shared connector-net
+# network so services reach each other by name (http://backend:8000).
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: connector-backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CORS_ORIGINS: http://localhost:5173
+    volumes:
+      - ./backend/app:/app/app
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - connector-net
+
+  frontend:
+    build:
+      context: .
+      target: dev
+    container_name: connector-frontend
+    environment:
+      # Vite proxies /api to this URL; "backend" is the compose service name.
+      VITE_API_PROXY_TARGET: http://backend:8000
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - connector-net
+
+networks:
+  connector-net:
+    name: connector-net
+    driver: bridge

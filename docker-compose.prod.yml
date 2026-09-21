@@ -1,0 +1,41 @@
+# Production stack: nginx serves the built bundle and reverse-proxies /api
+# to the backend over connector-net.
+#   docker compose -f docker-compose.prod.yml up --build -d
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: connector-backend
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - connector-net
+
+  frontend:
+    build:
+      context: .
+      target: prod
+    container_name: connector-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - connector-net
+
+networks:
+  connector-net:
+    name: connector-net
+    driver: bridge
