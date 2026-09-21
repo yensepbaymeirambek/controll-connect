@@ -14,6 +14,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      JIRA_MCP_URL: ${JIRA_MCP_URL:-}
+      JIRA_MCP_TOOL: ${JIRA_MCP_TOOL:-jira_search}
+      JIRA_JQL: ${JIRA_JQL:-ORDER BY updated DESC}
     volumes:
       - ./backend/app:/app/app
     ports:
@@ -44,6 +47,25 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    networks:
+      - connector-net
+
+  # Jira over MCP. Started only with: docker compose --profile jira up
+  jira-mcp:
+    image: ghcr.io/sooperset/mcp-atlassian:latest
+    container_name: connector-jira-mcp
+    profiles: ["jira"]
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      JIRA_URL: ${JIRA_BASE_URL:-}
+      JIRA_USERNAME: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+    command: ["--transport", "streamable-http", "--port", "9000", "-vv"]
+    expose:
+      - "9000"
     networks:
       - connector-net
 

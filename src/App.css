@@ -16,3 +16,54 @@
 .status-dot.warn{background:#dba14f}
 .answer-text.answer-failed{color:#f3b9a4}
 .answer-mode{margin:7px 0 0;color:#8e909c;font-size:10px}
+
+/* Banners for unconfigured workspaces and failing sources. */
+.banner{display:flex;gap:11px;align-items:flex-start;background:#fff;border:1px solid #e8e8ec;border-left:3px solid #d9a05b;border-radius:9px;padding:14px 16px;margin-bottom:16px;color:#5c5d68}
+.banner-error{border-left-color:#c9614a}
+.banner svg{flex:0 0 auto;margin-top:2px;color:#c08a4e}
+.banner-error svg{color:#c9614a}
+.banner strong{display:block;font-size:12px;color:#30303a;margin-bottom:3px}
+.banner p{margin:0;font-size:11px;line-height:1.45}
+.banner code{background:#f2f2f5;border-radius:4px;padding:1px 5px;font-size:10px}
+
+/* Chat thread. */
+.suggestions{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px}
+.suggestions button{background:#3a3b49;border:1px solid #4a4b5a;color:#c8c9d1;border-radius:20px;font-size:11px;padding:6px 12px}
+.suggestions button:hover:not(:disabled){background:#454657;color:#fff}
+.suggestions button:disabled{opacity:.5}
+.thread{margin-top:16px;max-height:520px;overflow-y:auto;padding-right:4px}
+.turn{margin-bottom:14px}
+.turn p{margin:0;font-size:12px;line-height:1.5}
+.turn-user p{background:#3a3b49;color:#fff;border-radius:9px 9px 3px 9px;padding:9px 12px;margin-left:auto;max-width:78%;width:fit-content}
+.turn-assistant p{color:#e4e5ea}
+.turn p.turn-failed{color:#f3b9a4}
+.thinking{display:flex;align-items:center;gap:7px;color:#9092a0}
+
+/* Cards produced by the backend from model-authored specs. */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:11px;margin-top:12px}
+.card{background:#363746;border:1px solid #454655;border-radius:9px;padding:14px}
+.card-wide{grid-column:1/-1}
+.card-title{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:#9092a0;margin-bottom:9px}
+.card-metric .card-value{display:block;font-size:26px;letter-spacing:-1px;color:#fff}
+.card-metric small{font-size:10px;color:#8e909c}
+.bar-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.bar-list li{display:grid;grid-template-columns:minmax(58px,88px) 1fr 26px;align-items:center;gap:8px;font-size:10px;color:#c8c9d1}
+.bar-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{background:#434454;border-radius:3px;height:7px;overflow:hidden}
+.bar-track i{display:block;height:100%;background:#f0a16e;border-radius:3px}
+.bar-value{text-align:right;color:#fff}
+.table-scroll{overflow-x:auto}
+.card-table{width:100%;border-collapse:collapse;font-size:10px;color:#c8c9d1}
+.card-table th{text-align:left;color:#9092a0;text-transform:uppercase;letter-spacing:.6px;font-weight:600;padding:0 10px 6px 0;white-space:nowrap}
+.card-table td{padding:5px 10px 5px 0;border-top:1px solid #454655;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Dashboard panels can host a card directly. */
+.panel .card{background:none;border:0;padding:0}
+.panel .card-title{color:#999aa3}
+.panel .bar-list li{color:#6a6b77}
+.panel .bar-track{background:#f0f0f3}
+.panel .bar-value{color:#30303a}
+.empty{font-size:11px;color:#999aa3;margin:16px 0 0}
+.sync-time{display:block;color:#f0a16e;font-size:12px;margin-top:3px}
+.usage small{color:#747683;font-size:10px}
+.primary-button:disabled{opacity:.6}

@@ -1,110 +1,110 @@
-import { useCallback, useState } from 'react'
-import { Activity, AlertCircle, ArrowUpRight, BarChart3, Check, ChevronDown, CircleHelp, CloudDownload, Database, FileText, Filter, LayoutDashboard, Loader2, MoreHorizontal, Plus, Search, Send, Settings2, Sparkles, Users, Zap } from 'lucide-react'
+import { useCallback } from 'react'
+import { Activity, AlertCircle, BarChart3, CircleHelp, Database, LayoutDashboard, Loader2, RefreshCw, Search, Settings2, Sparkles } from 'lucide-react'
 import './App.css'
-import { api, ApiError, type Chart, type Connector, type Metric, type QueryResponse } from './lib/api'
+import { api, type Chart, type Connector, type Metric } from './lib/api'
 import { buildPath, toAreaPath } from './lib/chart'
 import { useResource } from './hooks/useResource'
+import { CardView } from './components/CardView'
+import { Chat } from './components/Chat'
 
 const CHART_WIDTH = 700
 const CHART_HEIGHT = 220
 
-// Presentation for each metric the API can return; the backend sends data, not styling.
-const METRIC_STYLES: Record<string, { icon: React.ReactNode; tone: string }> = {
-  tasks_completed: { icon: <Check size={18} />, tone: 'green' },
-  open_work: { icon: <Activity size={18} />, tone: 'blue' },
-  contributors: { icon: <Users size={18} />, tone: 'orange' },
-  freshness: { icon: <FileText size={18} />, tone: 'purple' },
-}
-
-const SOURCE_COLORS: Record<string, string> = { jira: 'jira', asana: 'asana', linear: 'linear' }
-
 function App() {
-  const [query, setQuery] = useState('')
-  const [activeNav, setActiveNav] = useState('Overview')
-  const [answer, setAnswer] = useState<QueryResponse | null>(null)
-  const [asking, setAsking] = useState(false)
-  const [askError, setAskError] = useState<string | null>(null)
-
   const metrics = useResource(useCallback((signal: AbortSignal) => api.metrics(signal), []))
   const connectors = useResource(useCallback((signal: AbortSignal) => api.connectors(signal), []))
 
-  const submitQuery = async () => {
-    const question = query.trim()
-    if (!question || asking) return
-    setAsking(true)
-    setAskError(null)
-    try {
-      setAnswer(await api.query(question))
-      setQuery('')
-    } catch (error) {
-      setAskError(error instanceof ApiError ? error.message : 'Unexpected error')
-    } finally {
-      setAsking(false)
-    }
+  const reloadAll = () => {
+    metrics.reload()
+    connectors.reload()
   }
 
-  const navItems = [{ label: 'Overview', icon: LayoutDashboard }, { label: 'Ask data', icon: Sparkles }, { label: 'Dashboards', icon: BarChart3 }, { label: 'Exports', icon: CloudDownload }]
+  const configured = connectors.data?.configured ?? true
+  const sourceErrors = metrics.data?.errors ?? []
 
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark"><Sparkles size={16} /></span><span>signal<span className="brand-dot">.</span></span></div>
-      <div className="workspace-switcher"><span className="workspace-avatar">N</span><span><strong>Northstar team</strong><small>Workspace</small></span><ChevronDown size={14} /></div>
-      <nav className="nav-list"><p className="nav-label">Workspace</p>{navItems.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${activeNav === label ? 'active' : ''}`} onClick={() => setActiveNav(label)}><Icon size={17} />{label}{label === 'Ask data' && <span className="nav-kbd">⌘ K</span>}</button>)}<p className="nav-label">Manage</p><button className="nav-item"><Database size={17} />Connections<span className="nav-count">{connectors.data?.length ?? '–'}</span></button><button className="nav-item"><Settings2 size={17} />Settings</button></nav>
-      <div className="sidebar-bottom"><div className="usage"><div><span>Sync capacity</span><strong>72%</strong></div><div className="usage-bar"><span /></div><small>Resets in 12 days</small></div><div className="user-row"><div className="user-avatar">AM</div><span><strong>Alex Morgan</strong><small>Admin</small></span><MoreHorizontal size={17} /></div></div>
+      <nav className="nav-list">
+        <p className="nav-label">Workspace</p>
+        <button className="nav-item active"><LayoutDashboard size={17} />Overview</button>
+        <button className="nav-item"><BarChart3 size={17} />Dashboards</button>
+        <p className="nav-label">Manage</p>
+        <button className="nav-item"><Database size={17} />Connections<span className="nav-count">{connectors.data?.connectors.length ?? 0}</span></button>
+        <button className="nav-item"><Settings2 size={17} />Settings</button>
+      </nav>
+      <div className="sidebar-bottom">
+        <div className="usage"><small>Last sync</small><strong className="sync-time">{formatSync(metrics.data?.last_sync ?? null)}</strong></div>
+      </div>
     </aside>
-    <main className="main-content">
-      <header className="topbar"><div className="breadcrumbs"><span>Northstar team</span><span>/</span><strong>{activeNav}</strong></div><div className="top-actions"><button className="icon-button" title="Help"><CircleHelp size={18} /></button><button className="icon-button" title="Search"><Search size={18} /></button><button className="primary-button"><Plus size={16} /> Add connection</button></div></header>
-      <div className="page-content">
-        <section className="intro"><div><p className="eyebrow"><Activity size={14} /> LIVE WORKSPACE</p><h1>Good morning, Alex</h1><p className="subheading">Your connected work, distilled into decisions.</p></div><button className="date-button">Last 30 days <ChevronDown size={15} /></button></section>
 
-        <section className="ask-panel">
-          <div className="ask-heading"><span className="sparkle-icon"><Sparkles size={17} /></span><div><h2>Ask your workspace</h2><p>Query Jira, Asana, and more in plain language.</p></div><span className="beta-tag">BETA</span></div>
-          <div className="query-input">
-            <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && submitQuery()} placeholder="e.g. Which projects are at risk this month?" disabled={asking} />
-            <button onClick={submitQuery} disabled={asking || !query.trim()} aria-label="Send question">{asking ? <Loader2 size={16} className="spin" /> : <Send size={16} />}</button>
+    <main className="main-content">
+      <header className="topbar">
+        <div className="breadcrumbs"><span>Workspace</span><span>/</span><strong>Overview</strong></div>
+        <div className="top-actions">
+          <button className="icon-button" title="Help"><CircleHelp size={18} /></button>
+          <button className="icon-button" title="Search"><Search size={18} /></button>
+          <button className="primary-button" onClick={reloadAll} disabled={metrics.loading}>
+            {metrics.loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} Refresh
+          </button>
+        </div>
+      </header>
+
+      <div className="page-content">
+        {!configured && <div className="banner">
+          <AlertCircle size={16} />
+          <div>
+            <strong>No connectors configured</strong>
+            <p>Set <code>JIRA_MCP_URL</code> to point at a Jira MCP server, or start the demo stack with the bundled stand-in.</p>
           </div>
-          {askError && <p className="ask-error"><AlertCircle size={13} /> {askError}</p>}
-          {answer && !askError && <div className="answer" aria-live="polite">
-            <p className="answer-question">{answer.question}</p>
-            <p className={`answer-text ${answer.mode === 'error' ? 'answer-failed' : ''}`}>{answer.answer}</p>
-            {answer.mode === 'local' && <p className="answer-mode">Local mode — set OPENAI_API_KEY to answer with ChatGPT.</p>}
-            {answer.rows.length > 0 && <table className="answer-table"><thead><tr>{Object.keys(answer.rows[0]).map((key) => <th key={key}>{key}</th>)}</tr></thead><tbody>{answer.rows.map((row, index) => <tr key={index}>{Object.values(row).map((value, cell) => <td key={cell}>{value}</td>)}</tr>)}</tbody></table>}
-            <p className="query-suggestion"><Zap size={13} /> Answered from: <span>{answer.sources.join(', ')}</span></p>
-          </div>}
-          {!answer && !askError && <div className="query-suggestion"><Zap size={13} /> Try: <span>Show me overdue Jira issues by team</span></div>}
-        </section>
+        </div>}
+
+        {sourceErrors.map((sourceError) => <div key={sourceError.source} className="banner banner-error">
+          <AlertCircle size={16} />
+          <div><strong>{sourceError.source} is failing</strong><p>{sourceError.message}</p></div>
+        </div>)}
+
+        <Chat onAnswered={reloadAll} />
 
         <section className="metric-grid">
-          {metrics.loading && Array.from({ length: 4 }, (_, index) => <div key={index} className="metric skeleton" />)}
+          {metrics.loading && !metrics.data && Array.from({ length: 4 }, (_, index) => <div key={index} className="metric skeleton" />)}
           {metrics.error && <StateMessage kind="error" message={metrics.error} />}
           {metrics.data?.metrics.map((metric) => <MetricCard key={metric.id} metric={metric} />)}
         </section>
 
         <section className="dashboard-grid">
           <div className="panel chart-panel">
-            <div className="panel-header"><div><h2>Work completed</h2><p>Across all connected sources</p></div><div className="panel-actions"><button className="filter-button"><Filter size={14} /> Filter</button><button className="icon-button"><MoreHorizontal size={17} /></button></div></div>
-            {metrics.loading && <StateMessage kind="loading" message="Loading chart…" />}
-            {metrics.error && <StateMessage kind="error" message={metrics.error} />}
+            <div className="panel-header"><div><h2>Created vs. resolved</h2><p>Weekly, from issue timestamps</p></div></div>
+            {metrics.loading && !metrics.data && <StateMessage kind="loading" message="Loading chart…" />}
             {metrics.data && <WorkChart chart={metrics.data.chart} />}
           </div>
+
           <div className="right-stack">
             <div className="panel source-panel">
-              <div className="panel-header"><div><h2>Connected sources</h2><p>Sync status at a glance</p></div><button className="icon-button" aria-label="Add source"><Plus size={17} /></button></div>
-              {connectors.loading && <StateMessage kind="loading" message="Loading sources…" />}
+              <div className="panel-header"><div><h2>Connected sources</h2><p>Live status from each MCP server</p></div></div>
+              {connectors.loading && !connectors.data && <StateMessage kind="loading" message="Checking sources…" />}
               {connectors.error && <StateMessage kind="error" message={connectors.error} />}
-              {connectors.data?.map((connector) => <SourceRow key={connector.id} connector={connector} />)}
-              {connectors.data && <button className="view-all">Manage connections <ArrowUpRight size={14} /></button>}
+              {connectors.data?.connectors.length === 0 && !connectors.loading && <p className="empty">Nothing connected yet.</p>}
+              {connectors.data?.connectors.map((connector) => <SourceRow key={connector.id} connector={connector} />)}
             </div>
-            {metrics.data && <div className="panel insight-panel">
-              <div className="insight-icon"><Sparkles size={18} /></div>
-              <div><p className="eyebrow">AI INSIGHT</p><h3>{metrics.data.insight.headline}</h3><p>{metrics.data.insight.detail}</p></div>
-              <button className="icon-button" aria-label="Open insight"><ArrowUpRight size={16} /></button>
-            </div>}
+            {metrics.data?.breakdown.by_state && <div className="panel"><CardView card={metrics.data.breakdown.by_state} /></div>}
           </div>
         </section>
+
+        {metrics.data?.breakdown.by_assignee && <section className="panel">
+          <CardView card={metrics.data.breakdown.by_assignee} />
+        </section>}
       </div>
     </main>
   </div>
+}
+
+function formatSync(iso: string | null): string {
+  if (!iso) return 'never'
+  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000)
+  if (seconds < 60) return `${seconds}s ago`
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`
+  return `${Math.round(seconds / 3600)}h ago`
 }
 
 function StateMessage({ kind, message }: { kind: 'loading' | 'error'; message: string }) {
@@ -112,29 +112,28 @@ function StateMessage({ kind, message }: { kind: 'loading' | 'error'; message: s
 }
 
 function MetricCard({ metric }: { metric: Metric }) {
-  const style = METRIC_STYLES[metric.id] ?? { icon: <Activity size={18} />, tone: 'blue' }
   return <div className="metric">
-    <div className={`metric-icon ${style.tone}`}>{style.icon}</div>
-    <div className="metric-copy"><span>{metric.label}</span><strong>{metric.value}</strong><small className={metric.direction === 'down' ? '' : 'positive'}>{metric.change} <em>{metric.detail}</em></small></div>
+    <div className={`metric-icon ${metric.direction === 'down' ? 'orange' : 'blue'}`}><Activity size={18} /></div>
+    <div className="metric-copy"><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></div>
   </div>
 }
 
 function WorkChart({ chart }: { chart: Chart }) {
-  const [completed, created] = chart.series
-  const completedPath = completed ? buildPath(completed.points, chart.y_max, CHART_WIDTH, CHART_HEIGHT) : ''
+  const [created, resolved] = chart.series
   const createdPath = created ? buildPath(created.points, chart.y_max, CHART_WIDTH, CHART_HEIGHT) : ''
+  const resolvedPath = resolved ? buildPath(resolved.points, chart.y_max, CHART_WIDTH, CHART_HEIGHT) : ''
   const ticks = Array.from({ length: 5 }, (_, index) => Math.round((chart.y_max / 4) * (4 - index)))
 
   return <>
     <div className="chart-legend">{chart.series.map((series, index) => <span key={series.id}><i className={`legend-dot ${index === 0 ? 'teal' : 'coral'}`} /> {series.label}</span>)}</div>
     <div className="chart">
-      <div className="chart-y">{ticks.map((tick) => <span key={tick}>{tick}</span>)}</div>
+      <div className="chart-y">{ticks.map((tick, index) => <span key={index}>{tick}</span>)}</div>
       <div className="chart-area">
         <div className="grid-lines"><i /><i /><i /><i /><i /></div>
-        <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} preserveAspectRatio="none" aria-label="Work completed chart">
-          <path className="area-fill" d={toAreaPath(completedPath, CHART_WIDTH, CHART_HEIGHT)} />
-          <path className="line teal-line" d={completedPath} />
-          <path className="line coral-line" d={createdPath} />
+        <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} preserveAspectRatio="none" aria-label="Created versus resolved">
+          <path className="area-fill" d={toAreaPath(createdPath, CHART_WIDTH, CHART_HEIGHT)} />
+          <path className="line teal-line" d={createdPath} />
+          <path className="line coral-line" d={resolvedPath} />
         </svg>
         <div className="chart-x">{chart.labels.map((label) => <span key={label}>{label}</span>)}</div>
       </div>
@@ -144,8 +143,11 @@ function WorkChart({ chart }: { chart: Chart }) {
 
 function SourceRow({ connector }: { connector: Connector }) {
   return <div className="source-row">
-    <span className={`source-logo ${SOURCE_COLORS[connector.id] ?? ''}`}>{connector.name[0]}</span>
-    <span><strong>{connector.name}</strong><small>Last synced {connector.last_sync} · {connector.records.toLocaleString()} records</small></span>
+    <span className={`source-logo ${connector.id}`}>{connector.name[0]}</span>
+    <span>
+      <strong>{connector.name}</strong>
+      <small>{connector.status === 'connected' ? `${connector.records.toLocaleString()} records` : connector.detail ?? connector.status}</small>
+    </span>
     <span className={`status-dot ${connector.status === 'connected' ? '' : 'warn'}`} title={connector.status} />
   </div>
 }

@@ -17,54 +17,65 @@ export interface Connector {
   id: string
   name: string
   status: string
-  last_sync: string
+  detail: string | null
   records: number
+  last_sync: string | null
 }
 
-export type MetricDirection = 'up' | 'down' | 'flat'
+export interface ConnectorsResponse {
+  connectors: Connector[]
+  configured: boolean
+}
 
 export interface Metric {
   id: string
   label: string
   value: string
-  change: string
   detail: string
-  direction: MetricDirection
-}
-
-export interface ChartSeries {
-  id: string
-  label: string
-  points: number[]
+  change: string
+  direction: 'up' | 'down' | 'flat'
 }
 
 export interface Chart {
   y_max: number
   labels: string[]
-  series: ChartSeries[]
+  series: { id: string; label: string; points: number[] }[]
 }
 
-export interface Insight {
-  headline: string
-  detail: string
+export interface SourceError {
+  source: string
+  message: string
 }
+
+/** Cards carry data computed by the backend; the model only chooses what to compute. */
+export type Card =
+  | { kind: 'metric'; title: string; value: string; detail: string }
+  | { kind: 'bar' | 'line'; title: string; group_by: string; data: { label: string; value: number }[] }
+  | { kind: 'table'; title: string; columns: string[]; rows: Record<string, string | number | null>[] }
 
 export interface MetricsResponse {
   metrics: Metric[]
   chart: Chart
-  insight: Insight
+  breakdown: { by_state: Card | null; by_assignee: Card | null }
+  last_sync: string | null
+  errors: SourceError[]
+  configured: boolean
 }
 
-/** 'llm' answered by ChatGPT, 'local' no API key configured, 'error' the model call failed. */
-export type QueryMode = 'llm' | 'local' | 'error'
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
 
-export interface QueryResponse {
-  question: string
+export type ChatMode = 'llm' | 'unconfigured' | 'error'
+
+export interface ChatResponse {
   answer: string
-  sources: string[]
-  rows: Record<string, string | number>[]
+  cards: Card[]
+  errors: SourceError[]
   generated_at: string
-  mode: QueryMode
+  record_count: number
+  mode: ChatMode
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -84,11 +95,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  connectors: (signal?: AbortSignal) => request<Connector[]>('/api/connectors', { signal }),
-  metrics: (signal?: AbortSignal) => request<MetricsResponse>('/api/metrics', { signal }),
-  query: (question: string, sources?: string[]) =>
-    request<QueryResponse>('/api/query', {
-      method: 'POST',
-      body: JSON.stringify({ question, sources }),
-    }),
+  connectors: (signal?: AbortSignal) => request<ConnectorsResponse>('/api/connectors', { signal }),
+  metrics: (signal?: AbortSignal, refresh = false) =>
+    request<MetricsResponse>(`/api/metrics${refresh ? '?refresh=true' : ''}`, { signal }),
+  chat: (messages: ChatMessage[], refresh = false) =>
+    request<ChatResponse>('/api/chat', { method: 'POST', body: JSON.stringify({ messages, refresh }) }),
 }

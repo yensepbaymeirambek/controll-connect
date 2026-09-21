@@ -5,13 +5,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .connectors import registry
-from .llm import LLMError, answer_question
+from . import analytics
+from .connectors.registry import Workspace
+from .llm import LLMError, answer_with_cards
 from .settings import get_settings
 
-app = FastAPI(title="Signal Connector API", version="0.1.0")
+app = FastAPI(title="Signal Connector API", version="0.2.0")
 
 settings = get_settings()
+workspace = Workspace(settings)
 
 # Direct browser calls need CORS; requests routed through the vite/nginx proxy
 # are same-origin and unaffected.
@@ -23,75 +25,80 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Dashboard payload. Values are still local-mode constants; they move behind the
-# connector registry once a live adapter lands.
-METRICS = [
-    {"id": "tasks_completed", "label": "Tasks completed", "value": "428", "change": "+18.4%", "detail": "vs. previous period", "direction": "up"},
-    {"id": "open_work", "label": "Open work", "value": "164", "change": "-6.2%", "detail": "vs. previous period", "direction": "down"},
-    {"id": "contributors", "label": "Active contributors", "value": "32", "change": "+4", "detail": "this month", "direction": "up"},
-    {"id": "freshness", "label": "Data freshness", "value": "12 min", "change": "Healthy", "detail": "last sync", "direction": "flat"},
-]
+# How many records the model sees. The rest it reasons about via the summary.
+SAMPLE_SIZE = 40
 
-CHART = {
-    "y_max": 200,
-    "labels": ["Aug 23", "Aug 30", "Sep 06", "Sep 13", "Sep 20"],
-    "series": [
-        {"id": "completed", "label": "Completed", "points": [32, 55, 48, 72, 86, 95, 121, 140, 163, 175]},
-        {"id": "created", "label": "Created", "points": [16, 34, 28, 47, 55, 66, 74, 84, 96, 104]},
-    ],
-}
 
-INSIGHT = {
-    "headline": "Delivery pace is up 18% this month",
-    "detail": "Frontend and Platform teams are driving the change.",
-}
+class ChatMessage(BaseModel):
+    role: str
+    content: str
 
-class QueryRequest(BaseModel):
-    question: str
-    sources: list[str] | None = None
 
-class ExportRequest(BaseModel):
-    source: str
-    format: str = "json"
-    filters: dict[str, Any] = {}
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    refresh: bool = False
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {"status": "ok", "timestamp": _now().isoformat()}
+
 
 @app.get("/api/connectors")
-def list_connectors() -> list[dict[str, Any]]:
-    return registry.describe_connectors()
-
-@app.get("/api/metrics")
-def workspace_metrics() -> dict[str, Any]:
-    return {"metrics": METRICS, "chart": CHART, "insight": INSIGHT}
-
-LOCAL_MODE_ANSWER = {
-    "answer": "Local mode: set OPENAI_API_KEY to answer this with ChatGPT.",
-    "rows": [{"team": "Platform", "overdue": 8}, {"team": "Frontend", "overdue": 6}, {"team": "Growth", "overdue": 4}],
-}
-
-@app.post("/api/query")
-async def query_workspace(request: QueryRequest) -> dict[str, Any]:
-    sources = request.sources or registry.connector_ids()
-    base = {
-        "question": request.question,
-        "sources": sources,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+async def list_connectors() -> dict[str, Any]:
+    return {
+        "connectors": await workspace.describe(),
+        "configured": bool(workspace.ids()),
     }
 
+
+@app.get("/api/metrics")
+async def workspace_metrics(refresh: bool = False) -> dict[str, Any]:
+    records, errors = await workspace.records(refresh=refresh)
+    now = _now()
+    return {
+        "metrics": analytics.compute_metrics(records, now),
+        "chart": analytics.compute_chart(records, now),
+        "breakdown": {
+            "by_state": analytics.execute_card({"kind": "bar", "title": "By state", "group_by": "state"}, records, now),
+            "by_assignee": analytics.execute_card({"kind": "bar", "title": "Open work by assignee", "filter": {"state": ["todo", "in_progress"]}, "group_by": "assignee", "limit": 8}, records, now),
+        },
+        "last_sync": workspace.last_sync_iso(),
+        "errors": errors,
+        "configured": bool(workspace.ids()),
+    }
+
+
+@app.post("/api/chat")
+async def chat(request: ChatRequest) -> dict[str, Any]:
+    records, errors = await workspace.records(refresh=request.refresh)
+    now = _now()
+    base: dict[str, Any] = {
+        "cards": [],
+        "errors": errors,
+        "generated_at": now.isoformat(),
+        "record_count": len(records),
+    }
+
+    if not workspace.ids():
+        return {**base, "answer": "No connectors are configured. Set JIRA_MCP_URL to connect Jira.", "mode": "unconfigured"}
     if not settings.llm_enabled:
-        return {**base, **LOCAL_MODE_ANSWER, "mode": "local"}
+        return {**base, "answer": "Chat needs an OpenAI key. Set OPENAI_API_KEY to enable it.", "mode": "unconfigured"}
 
-    records = await registry.collect_records(sources)
     try:
-        result = await answer_question(request.question, records, settings)
+        result = await answer_with_cards(
+            [message.model_dump() for message in request.messages],
+            analytics.summarize_for_model(records, now),
+            records[:SAMPLE_SIZE],
+            settings,
+        )
     except LLMError as error:
-        # Surface the reason instead of a 500 so the UI can show it inline.
-        return {**base, "answer": str(error), "rows": [], "mode": "error"}
-    return {**base, **result, "mode": "llm"}
+        # Surface the reason inline instead of a 500, so the UI can show it.
+        return {**base, "answer": str(error), "mode": "error"}
 
-@app.post("/api/export")
-def export_data(request: ExportRequest) -> dict[str, Any]:
-    return {"status": "ready", "source": request.source, "format": request.format, "download_url": "/api/exports/latest"}
+    cards = [card for card in (analytics.execute_card(spec, records, now) for spec in result["cards"]) if card]
+    return {**base, "answer": result["answer"], "cards": cards, "mode": "llm"}
