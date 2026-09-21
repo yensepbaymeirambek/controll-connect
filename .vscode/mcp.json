@@ -2,8 +2,12 @@
   "servers": {
     "signal-workspace": {
       "type": "stdio",
-      "command": "python",
-      "args": ["-m", "mcp_server"]
+      "command": "python3",
+      "args": ["-m", "mcp_server"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "SIGNAL_API_URL": "http://localhost:8000"
+      }
     }
   }
 }
